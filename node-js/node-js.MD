@@ -81,6 +81,133 @@ function foo () {
 
   const { name } = baz(bar.id)
 
-  return {...bar, ...{ name }}
+  return { ...bar, ...{ name } }
 }
 ```
+
+### Pure functions
+A quite popular package (more than two million downloads last month) has quite
+similar API: the function accepts string and array as a params and returns
+another string as a result.
+```js
+const arr = []
+const result = foo('input string', arr)
+```
+Seems pretty simple signature, but the story has not finished yet. If you will
+read the documentation for this function the array parameter is not actually
+input parameter – that's optional OUTPUT parameter which contains some metadata
+annotating the return value.
+So whats wrong with this function? Actually it has a bunch of design problems.
+
+The first is - confusing API. If we'll cover this function we'll notice that
+`arr` parameter doesn't influence on the result value. So looks like its up to
+client code provide array to the function or not. But if we don't provide it
+we don't receive part of its output.
+
+That reminded me the WinAPI, this old fashioned API for MS Windows designed
+ecosystem to let perform system calls and widely used for desktop application
+development more then ten years ago.
+```cpp
+PAINTSTRUCT ps;
+HDC hdc;
+TCHAR greeting[] = _T("Hello, World!");
+
+switch (message)
+{
+  case WM_PAINT:
+    hdc = BeginPaint(hWnd, &ps);
+
+    TextOut(hdc, 5, 5, greeting, _tcslen(greeting));
+
+    EndPaint(hWnd, &ps);
+    break;
+}
+```
+It included mostly procedural calls which operated few simple data structures
+and used to return special structure to determine was call successful or not.
+This API used a lot of passed `by reference` params to return multiple values
+in environment of strictly predefined data types. This API had a reason to go
+this way, but in modern JS infrastructure you really doesn't have to commit
+such tradeoffs.
+It seems developer decided that the real return data is not relevant with
+optional one and shouldn't be placed inside one object structure, but should be
+calculated simultaneously. Lest change a bit this function signature:
+```js
+const [result, arr] = foo('input string')
+```
+Here we return an array of result and array output value and
+destructuring it to obtain named variables. Performed this refactoring we
+satisfied both sides: those clients who interested in full information and those
+who need any particular part.
+```js
+const [result, arr] = foo('input string')
+const [result] = foo('input string')
+const [, arr] = foo('input string')
+```
+If this syntax looks slightly unfamiliar to you, take a look at common builtin
+type of number of not only functional programming oriented languages called
+`Tuple`
+```scala
+def foo = (1, "hello", Console) // define function which returns Tuple of three elements
+val (num, str, type) = foo() // destructuring Tuple into multiple varibles
+println(num) // 1
+println(str) // hello
+println(type) // scala.Console$@424c0bc4
+```
+This data structure helps to keep functions pure like was presented in current
+example. How it helps on a daily basis?
+For example you need to sequentially perform several `HTTP` requests and combine
+their results into one. The most common way how folks implement it looks like
+this:
+```js
+function login (login, password) {
+  let user = {}, token
+
+  return http('/tokens', {
+    method: 'post',
+    body: JSON.stringify({ email, password })
+  }).then(response => {
+    token = response.body.token
+    user.id = response.body.userId
+    return http(`/user/${user.id}`, {}, token)
+  }).then(response => {
+    user = response.body
+    return http(`/project/${user.id}`, {}, token)
+  }).then(response => {
+    const projects = response.body
+    return {
+      token,
+      user,
+      projects
+    }
+  })
+}
+```
+Looks quite ok for the first draft, but when we decide to revisit this function
+in future and refactor a bit, for example extract `user` and `project` fetching
+into separate functions, we will find our selfs in trouble.
+The reason is coupling: each fetching step depends on previously fetched data,
+which also obtained through shared closures. Lets get rid of them.
+
+```js
+function login (login, password) {
+  return http('/tokens', {
+    method: 'post',
+    body: JSON.stringify({ email, password })
+  })
+  .then(({ { user: { id }, token } }) => ([id, token]))
+  .then(([userId, token]) => Promise.all([
+    http(`/user/${userId}`, {}, token),
+    http(`/project/${userId}`, {}, token)
+  ]).then([{ body: user }, { body: projects }] => {
+    return {
+      token,
+      user,
+      projects
+    }
+  }))
+}
+```
+Here we are: each step is independent of surroundings, takes its parameters and
+return value, could be extracted as pure function (if we could pretend that
+`http` is also pure)
