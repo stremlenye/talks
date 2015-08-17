@@ -195,8 +195,8 @@ println(num) // 1
 println(str) // hello
 println(type) // scala.Console$@424c0bc4
 ```
-This data structure helps to keep functions pure like was presented in current
-example. How it helps on a daily basis?
+This data structure helps to avoid defining single purpose data structures and
+return simultaneously calculated but not tightly connected data. How it helps on a daily basis?
 For example you need to sequentially perform several `HTTP` requests and combine
 their results into one. The most common way how folks implement it looks like
 this:
@@ -224,11 +224,10 @@ function login (login, password) {
   })
 }
 ```
-Looks quite ok for the first draft, but when we decide to revisit this function
-in future and refactor a bit, for example extract `user` and `project` fetching
-into separate functions, we will find our selfs in trouble.
-The reason is coupling: each fetching step depends on previously fetched data,
-which also obtained through shared closures. Lets get rid of them.
+Looks quite ok for the first draft, but lets improve it a bit. First of all we
+could perform second and third requests at one time as far as they relies on
+same data. In fact we also notice that the closure clause is not necessary for
+new implementation. Lets get rid of it:
 
 ```js
 function login (login, password) {
@@ -275,26 +274,32 @@ so they started abusing them. So what problem could we see here? If we will look
 at this function from slightly different angle, we could notice that this
 function changes its own flow depending not on its own params, but eventually on
 environment variable which is set somewhere else by nobody knows who.
+
 Another problem here is two `if` clauses, which are actually increases
 [Cyclomatic complexity](https://en.wikipedia.org/wiki/Cyclomatic_complexity) for
 additional two points. If you are not common with this measurement, you could
 think about it like a quantity of test should be written to cover this function
 for hundred percent.
+
 In our case that means that we should write couple additional tests, setting
 proper environment variables sequentially. And that would be the only way to
 describe how does this function works, because no one of the language features
 was not used: there is no signature which could describe the dependency,
 no input params validation.
+
 If we take a closer look at environment variables you could notice that there
 is no difference between them and classical global variables which are avoided
 to be used in most programming languages.
+
 There is a huge list of reasons why global variables are so complained starting
 from hidden dependencies and hard testing to concurrent assignment issues. And
 things getting worth as far as your project grows.
+
 To take things under control and deal with growing complexity years ago people
 invented such thing as [Dependency injection](http://www.martinfowler.com/articles/injection.html).
 In fact this idea basics are laying on simple fundamental rule that function
 becomes self-descriptive and predictable if it's relies only on its own params.
+
 As first step to apply DI for our function will be to define the two params:
 ```js
 export function foo(env, flag) {
@@ -311,11 +316,14 @@ So now our function explicitly defines two dependencies it's waiting for to be
 supplied with. So we make the external code to care about which function flow to
 choose also giving it an opportunity to change this flow independent of actual
 environment. Much more flexible, isn't it?
+
 But such flags as `env` and `flag` is not very descriptive it self and could
 mean a lot of things under the hood.
+
 Most of the time we use environment variables to make our code not to perform
 http requests during test run, or to use test endpoint to run integration tests
 and so on. Also our `flag` could switch the `Accept` header value.
+
 That the way how we could uncover real dependency which this function desired:
 ```js
 export function foo(endpoint, responseType) {
@@ -328,6 +336,7 @@ export function foo(endpoint, responseType) {
 }
 ```
 That still doesn't allow us to switch of http request during unit tests run.
+
 Lets apply dependency injection ones more. Here we have strong dependency on
 `http` function. Lets assume that the signature of this function is:
 ```scala
@@ -356,6 +365,7 @@ As an extra step we could get rid of `http` reference in external code and
 incapsulate it inside one module. That is quite useful especially for large
 applications where depending on the API much more safer and flexible solution,
 then depending on particular implementation.
+
 Lets decouple deps a little bit:
 ```js
 export function foo(http) {
