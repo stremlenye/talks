@@ -23,9 +23,9 @@ Type system of the Javascript differs a lot from common one of most popular
 enterprise programming languages like Java, Scala, C# and so on. Custom types
 are functions and objects all have one type and acts more like hash maps then
 objects: we could define new properties on every object and remove ones when
-we desire. 
-The first thing I want to talk about is how people abusing the ability of JS
-objects to be extended. This is so widely spread pattern
+we desire.
+The first thing I want to talk about is how objects ability to be extended
+could be abused in average situation.
 For example we have two simple functions:
 ```js
 function baz (bar) {
@@ -43,10 +43,8 @@ function foo () {
   return bar
 }
 ```
-
-`foo` provides `bar` parameter to `baz` to let it assign some property and then
-returns `bar` to the function caller. What's exactly wrong with this example?
-Lets take a closer look.
+Function provides parameter to another one and returns it to the enclosing
+scope. What's exactly wrong with this example? Lets take a closer look.
 Definition of `bar` includes two properties: `id` and `description`
 ```js
 {
@@ -54,9 +52,10 @@ Definition of `bar` includes two properties: `id` and `description`
   description: 'xyz'
 }
 ```
-and the owner function doesn't know anything what could happen with `bar` during
-`baz` execution. `baz` could be placed somewhere else even in third-party module
-and modify structure of provided variable whatever the `bar` developer want to.
+and the owner function doesn't know anything what could happen with its own
+object during execution. This function could be obtained from other module,
+even third-party one, could be supposed to be extracted out current module or
+whatever and eventually refactored to follow different logic:
 ```js
 function baz (bar) {
   bar.name = getName()
@@ -65,14 +64,16 @@ function baz (bar) {
   }
 }
 ```
-Looks not so reliable as supposed to be, right? Thats a joke (which also
-violates on single responsibility principle), but some `npm` packages used to do
-such things. For example some of the `http` middlewares extend `request` object
-with its own metadata or override `response` body in favor of its own
+Looks not so reliable as supposed to be, right? But some `npm` packages used to
+do such things. For example some of the `http` middlewares extend `request`
+object with its own metadata or override `response` body in favor of its own
 conventions.
-So how I would prefer to see this API? Fist of all I don't want to pass my
-own object somewhere else to be harmed and violated. So I define another `baz`
-parameter:
+
+How could we improve this function API? First of all `baz` function doesn't
+even need the entire object – just one number it relies on.
+Also I don't want to pass my own object somewhere else to be harmed and violated.
+So I define another `baz` parameter make it to return the result of the
+computation:
 ```js
 function baz (num) {
   const name = num % 2 ? getName() : getAnotherName()
@@ -92,6 +93,34 @@ function foo () {
   const { name } = baz(bar.id)
 
   return { ...bar, ...{ name } }
+}
+```
+We shared only necessary data and decided what to do with result without any
+care how it was calculate. No data was harmed or uncovered. Pretty simple idea
+which saves a lot of debugging time as far as you exactly know the place where
+you data could be modified.
+
+And few words about `delete` clause. A lot of simple `CRUD` http services, which
+are most common applications implemented nowadays, in attempt to prevent
+uncover of some sensible data implement functions which delete particular fields
+of object:
+```js
+function formatResult (res) {
+  delete res.password
+}
+```
+First of all: stop it - this is not yours, somebody may need it, Ok? Second idea
+is: are you hundred percent sure that this particular field will be one and only
+thing you don't want to expose? Another developer one day may define an
+`accountInfo` field on the entity and this function wouldn't save you if
+somebody forget to modify it. So format your result carefully:
+```js
+function formatResult (res) {
+  return {
+    id: res.id,
+    name: res.name,
+    description: res.description,
+  }
 }
 ```
 
