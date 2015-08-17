@@ -109,7 +109,9 @@ function formatResult (res) {
   delete res.password
 }
 ```
-First of all: stop it - this is not yours, somebody may need it, Ok? Second idea
+First of all: stop it - this is not yours, somebody may need it, Ok?
+
+Second idea
 is: are you hundred percent sure that this particular field will be one and only
 thing you don't want to expose? Another developer one day may define an
 `accountInfo` field on the entity and this function wouldn't save you if
@@ -126,22 +128,22 @@ function formatResult (res) {
 
 ### Pure functions
 A quite popular package (more than two million downloads last month) has quite
-similar API: the function accepts string and array as a params and returns
-another string as a result.
+similar API as our first example: the function accepts string and array as a
+params and returns another string as a result.
 ```js
 const arr = []
 const result = foo('input string', arr)
 ```
-Seems pretty simple signature, but the story has not finished yet. If you will
-read the documentation for this function the array parameter is not actually
-input parameter – that's optional OUTPUT parameter which contains some metadata
+Signature seems pretty simple, but the story has not finished yet. If you will
+read the documentation for this function you will find that array parameter is not actually
+input parameter, but optional OUTPUT parameter which contains some metadata
 annotating the return value.
 So whats wrong with this function? Actually it has a bunch of design problems.
 
-The first is - confusing API. If we'll cover this function we'll notice that
-`arr` parameter doesn't influence on the result value. So looks like its up to
-client code provide array to the function or not. But if we don't provide it
-we don't receive part of its output.
+The first is - confusing API. If we'll cover this function with tests we'll
+notice that `arr` parameter doesn't influence on the result value. So looks like
+its up to client code provide array to the function or not. But if we don't
+provide it we cant receive part of internally calculated output.
 
 That reminded me the WinAPI, this old fashioned API for MS Windows designed
 ecosystem to let perform system calls and widely used for desktop application
