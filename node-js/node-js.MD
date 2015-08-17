@@ -19,8 +19,13 @@ appeared frustrating "patterns" (from my perspective)
 
 ## Main part
 ### Dynamic type system abuse
+Type system of the Javascript differs a lot from common one of most popular
+enterprise programming languages like Java, Scala, C# and so on. Custom types
+are functions and objects all have one type and acts more like hash maps then
+objects: we could define new properties on every object and remove ones when
+we desire. 
 The first thing I want to talk about is how people abusing the ability of JS
-objects to be extended.
+objects to be extended. This is so widely spread pattern
 For example we have two simple functions:
 ```js
 function baz (bar) {
