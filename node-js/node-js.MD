@@ -1,6 +1,11 @@
 # Development for Node JS from statically typed languages developer perspective
 
 ## Intro
+Hi,
+my name is Yuriy Ankudinov and am a software developer at commercetools.
+My team is developing merchants administration console as part of the platform
+using NodeJs for backend so the most things I'll talk about I'am dealing with on
+the daily basis.
 
 ## Motivation
 When I've started learning and developing for Node JS platform I dived deeply
@@ -191,14 +196,14 @@ which also obtained through shared closures. Lets get rid of them.
 
 ```js
 function login (login, password) {
-  return http('/tokens', {
+  return http('/tokens', { // createToken(login, password)
     method: 'post',
     body: JSON.stringify({ email, password })
   })
   .then(({ { user: { id }, token } }) => ([id, token]))
   .then(([userId, token]) => Promise.all([
-    http(`/user/${userId}`, {}, token),
-    http(`/project/${userId}`, {}, token)
+    http(`/user/${userId}`, {}, token), // fetchUser(userId, token)
+    http(`/project/${userId}`, {}, token) // fetchProjects(userId, token)
   ]).then([{ body: user }, { body: projects }] => {
     return {
       token,
@@ -209,5 +214,141 @@ function login (login, password) {
 }
 ```
 Here we are: each step is independent of surroundings, takes its parameters and
-return value, could be extracted as pure function (if we could pretend that
-`http` is also pure)
+return value, could be extracted as pure function (if we could assume that
+`http` is also pure) and reused wherever you want.
+
+#### Dependency injection
+Another one Nodejs concept which I want o discuss is environment variables.
+I've saw a lot of different ways how developers use this feature widely spread
+around the ecosystem and most frequently met left more questions then answers.
+When I first learned about environment variables, I've thought
+"What a lovely way to switch configurations" but the devil was in the detail.
+```js
+export function foo() {
+  if(process.env.NODE_ENV === 'test') {
+    // do something
+  }
+  if(process.env.OTHER_VAR === 'SOME_FLAG') {
+    // do another thing
+  }
+  // perform some common operations
+}
+```
+And this detail was simple: thats to easy for developer to access this variables
+so they started abusing them. So what problem could we see here? If we will look
+at this function from slightly different angle, we could notice that this
+function changes its own flow depending not on its own params, but eventually on
+environment variable which is set somewhere else by nobody knows who.
+Another problem here is two `if` clauses, which are actually increases
+[Cyclomatic complexity](https://en.wikipedia.org/wiki/Cyclomatic_complexity) for
+additional two points. If you are not common with this measurement, you could
+think about it like a quantity of test should be written to cover this function
+for hundred percent.
+In our case that means that we should write couple additional tests, setting
+proper environment variables sequentially. And that would be the only way to
+describe how does this function works, because no one of the language features
+was not used: there is no signature which could describe the dependency,
+no input params validation.
+If we take a closer look at environment variables you could notice that there
+is no difference between them and classical global variables which are avoided
+to be used in most programming languages.
+There is a huge list of reasons why global variables are so complained starting
+from hidden dependencies and hard testing to concurrent assignment issues. And
+things getting worth as far as your project grows.
+To take things under control and deal with growing complexity years ago people
+invented such thing as [Dependency injection](http://www.martinfowler.com/articles/injection.html).
+In fact this idea basics are laying on simple fundamental rule that function
+becomes self-descriptive and predictable if it's relies only on its own params.
+As first step to apply DI for our function will be to define the two params:
+```js
+export function foo(env, flag) {
+  if(env === 'test') {
+    // do something
+  }
+  if(flag === 'SOME_FLAG') {
+    // do another thing
+  }
+  // perform some common operations
+}
+```
+So now our function explicitly defines two dependencies it's waiting for to be
+supplied with. So we make the external code to care about which function flow to
+choose also giving it an opportunity to change this flow independent of actual
+environment. Much more flexible, isn't it?
+But such flags as `env` and `flag` is not very descriptive it self and could
+mean a lot of things under the hood.
+Most of the time we use environment variables to make our code not to perform
+http requests during test run, or to use test endpoint to run integration tests
+and so on. Also our `flag` could switch the `Accept` header value.
+That the way how we could uncover real dependency which this function desired:
+```js
+export function foo(endpoint, responseType) {
+  http(endpoint, {
+    headers: {
+      'Accept': responseType
+    }
+  })
+  // perform some common operations
+}
+```
+That still doesn't allow us to switch of http request during unit tests run.
+Lets apply dependency injection ones more. Here we have strong dependency on
+`http` function. Lets assume that the signature of this function is:
+```scala
+http(url, options): Promise[ response, error ]
+```
+and rewrite the our function with this assumption:
+```js
+export function foo(http, endpoint, responseType) {
+  http(endpoint, {
+    headers: {
+      'Accept': responseType
+    }
+  })
+  // perform some common operations
+}
+```
+So our production code could provide an external `http` function as a param and
+for test we could use simple spies:
+```js
+const httpMock = createSpy().toReturn(new Promise((res, rej) => {
+  res({/* response */})
+})))
+foo(httpMock, 'endpoint', 'application/json')
+```
+As an extra step we could get rid of `http` reference in external code and
+incapsulate it inside one module. That is quite useful especially for large
+applications where depending on the API much more safer and flexible solution,
+then depending on particular implementation.
+Lets decouple deps a little bit:
+```js
+export function foo(http) {
+  return (endpoint, responseType) => {
+    http(endpoint, {
+      headers: {
+        'Accept': responseType
+      }
+    })
+    // perform some common operations
+  }
+}
+
+//bind-http.js
+import http from 'http'
+
+export default bindHttp(func) {
+  return func(http)
+}
+```
+Now external code doesn't need to know anything about http module
+implementation and care about setting proper deps for our function or importing
+them to its own scope. And we still have an option of direct injection of http
+dependency for test or customization purpose.
+
+### Conclusion
+That was the last thing I want to discuss today.
+At the end I want to say, all the technics I've was speaking about are supposed
+to help sort out the main deal of the software development: taking complexity
+under control. As it was said, that not so hard to implement complex things –
+its hard to implement them in easy way.
+Thank you!
