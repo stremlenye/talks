@@ -24,6 +24,18 @@ enterprise programming languages like Java, Scala, C# and so on. Custom types
 are functions and objects all have one type and acts more like hash maps then
 objects: we could define new properties on every object and remove ones when
 we desire.
+```js
+function Foo () { /* … */ }
+const obj = new Foo()
+```
+```js
+const obj = { id: 1 }
+obj[id] = 2
+delete obj.id
+```
+```js
+typeof { id : 1 } === typeof { name: 'n' } //true
+```
 The first thing I want to talk about is how objects ability to be extended
 could be abused in average situation.
 For example we have two simple functions:
@@ -149,18 +161,18 @@ That reminded me the WinAPI, this old fashioned API for MS Windows designed
 ecosystem to let perform system calls and widely used for desktop application
 development more then ten years ago.
 ```cpp
-PAINTSTRUCT ps;
-HDC hdc;
+PAINTSTRUCT ps; // 'on stack' structure
+HDC hdc; // 'on stack' structure
 TCHAR greeting[] = _T("Hello, World!");
 
 switch (message)
 {
   case WM_PAINT:
-    hdc = BeginPaint(hWnd, &ps);
+    hdc = BeginPaint(hWnd, &ps); // ps provided by ref
 
     TextOut(hdc, 5, 5, greeting, _tcslen(greeting));
 
-    EndPaint(hWnd, &ps);
+    EndPaint(hWnd, &ps); // ps provided by ref
     break;
 }
 ```
@@ -216,11 +228,7 @@ function login (login, password) {
     return http(`/project/${user.id}`, {}, token)
   }).then(response => {
     const projects = response.body
-    return {
-      token,
-      user,
-      projects
-    }
+    return { token, user, projects }
   })
 }
 ```
@@ -231,20 +239,16 @@ new implementation. Lets get rid of it:
 
 ```js
 function login (login, password) {
-  return http('/tokens', { // createToken(login, password)
+  return http('/tokens', { // createToken(login, pass)
     method: 'post',
     body: JSON.stringify({ email, password })
   })
   .then(({ { user: { id }, token } }) => ([id, token]))
   .then(([userId, token]) => Promise.all([
-    http(`/user/${userId}`, {}, token), // fetchUser(userId, token)
-    http(`/project/${userId}`, {}, token) // fetchProjects(userId, token)
+    http(`/user/${userId}`, {}, token), // getUser(id, token)
+    http(`/project/${userId}`, {}, token) // getProjects(id, token)
   ]).then([{ body: user }, { body: projects }] => {
-    return {
-      token,
-      user,
-      projects
-    }
+    return { token, user, projects }
   }))
 }
 ```
@@ -353,6 +357,13 @@ export function foo(http, endpoint, responseType) {
   // perform some common operations
 }
 ```
+```js
+import http from 'http'
+import foo from 'foo'
+
+foo(http, 'example.org', 'application/json')
+```
+
 So our production code could provide an external `http` function as a param and
 for test we could use simple spies:
 ```js
@@ -368,18 +379,14 @@ then depending on particular implementation.
 
 Lets decouple deps a little bit:
 ```js
+// foo.js
 export function foo(http) {
   return (endpoint, responseType) => {
-    http(endpoint, {
-      headers: {
-        'Accept': responseType
-      }
-    })
-    // perform some common operations
+    // body
   }
 }
 
-//bind-http.js
+// bind-http.js
 import http from 'http'
 
 export default bindHttp(func) {
